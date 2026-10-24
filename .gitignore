@@ -1,0 +1,5 @@
+.sites/
+clipson-deploy.tar.gz
+web/dist/
+web/node_modules/
+*.log

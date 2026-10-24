@@ -1,0 +1,12 @@
+{
+  "name": "clipson",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/serve.mjs --production",
+    "check": "node --check src/app.js"
+  }
+}
