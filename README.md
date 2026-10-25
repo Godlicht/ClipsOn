@@ -27,7 +27,7 @@ Domyślnie używany jest **Whisper large-v3** i dopasowanie fonetyczne do język
 - Zachowany jest zegar wideo, w tym opóźniony początek ścieżki i cisza. Audio jest resamplowane do 16 kHz oraz przetwarzane w pięciominutowych fragmentach z dwusekundowym kontekstem. Czasy fragmentów wracają do bezwzględnych sekund nagrania.
 - Eksport JSON zachowuje `start`, `end`, `score` i `timing` każdego słowa. Niedostępne czasy pozostają `null`; słowa są oznaczane w interfejsie. Nie są usuwane z tekstu tylko dlatego, że model nie umiał ich dopasować.
 - Dokładność zapisu do milisekund nie oznacza gwarancji trafienia do jednej milisekundy. Szum, muzyka, nazwy własne, liczby i nakładające się głosy mogą powodować pomyłki. Przed publikacją napisów trzeba przejrzeć wynik.
-- Generowanie klipów pozostaje kolejnym etapem. Animowane napisy są już dostępne w podglądzie i w eksporcie MP4.
+- Dostępne są automatyczne propozycje klipów na podstawie transkrypcji, edycja cięć oraz eksport MP4 z animowanymi napisami.
 
 ## Pliki i prywatność
 
@@ -104,3 +104,27 @@ Podgląd mieści napisy w rzeczywistym obrazie wideo, poza czarnymi pasami, i ma
 Po eksporcie użyj „Pobierz MP4”. Eksport ma rzeczywisty postęp z FFmpeg i obsługę anulowania. Materiał i dane napisów trafiają wyłącznie do lokalnego silnika. Aplikacja przetwarza jeden materiał naraz, więc transkrypcja i eksport nie obciążają silnika jednocześnie. Film wynikowy pozostaje w katalogu zadania do sprzątnięcia zgodnie z zasadami plików roboczych opisanymi powyżej. Wideo nie ma limitu rozmiaru narzuconego przez aplikację; dane JSON napisów mają limit 20 MB.
 
 Moduły: `web/src/captions.js`, `web/src/caption-utils.js`, `web/src/captions.css`, `backend/caption_export.py` oraz `backend/caption_worker.py`.
+
+## Wybór najciekawszych momentów i tworzenie klipów
+
+Po transkrypcji lub imporcie JSON wybierz długość, liczbę propozycji i opcjonalnie temat (np. praktyczne porady). „Znajdź najciekawsze momenty” uruchamia lokalną analizę; plik wideo nie jest potrzebny do samego oceniania tekstu. Wideo jest przekazywane do lokalnego silnika dopiero przy eksporcie.
+
+Tryb AI używa [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), na licencji Apache 2.0. Jednorazowo pobierz około 8 GB wag:
+
+```powershell
+powershell -File backend/setup-clips.ps1
+```
+
+Po pobraniu uruchom ponownie backend. Model jest w `backend/.runtime/models/highlights`, poza Git. Korzysta z PyTorch i Transformers z istniejącego środowiska (Transformers 4.57+); nie wykonuje zdalnego kodu modelu. Pobieranie używa konkretnej rewizji, zapisanej w `clipson-model.json`. Po instalacji wagi i tokenizer są odczytywane wyłącznie lokalnie. AI wybiera GPU według `CLIPSON_DEVICE`, tak jak WhisperX; na CPU będzie znacznie wolniejsze. Proces kończy się po analizie i zwalnia pamięć GPU. Transkrypcja, analiza AI i eksport są wykonywane kolejno przez wspólny menedżer zadań.
+
+Tryb „Szybka analiza tekstu” działa bez dodatkowego modelu: ocenia pytania, porady, historie i kontrasty, obniżając ocenę powitań i autopromocji. Jest oznaczony osobno i nie udaje analizy AI. W trybie AI brak wag lub nieprawidłowa odpowiedź modelu daje komunikat błędu; aplikacja nie przełącza się po cichu na reguły.
+
+Granice propozycji powstają z oryginalnych czasów słów i interpunkcji. Długie wypowiedzi są dzielone na krótsze jednostki, kandydaci są rozdzielani po całym nagraniu i ograniczani do 96 przed oceną modelu (partie do 8). To nie jest analiza obrazu, emocji głosu ani gwarancja popularności; warto obejrzeć propozycje. Model zwraca wyłącznie identyfikatory istniejących kandydatów, tytuły, uzasadnienia i ocenę redakcyjną. Czasy ani cytaty wygenerowane przez model nie są przyjmowane. Filtrowanie usuwa nakładające się propozycje. Krótkie wypowiedzi mogą dać mniej lub krótsze klipy; aplikacja nie powiela wyników ani nie dopełnia ich ciszą.
+
+„Podgląd fragmentu” odtwarza wycinek w głównym podglądzie oryginalnego kadru i zatrzymuje na jego końcu. „Całe wideo” wychodzi z podglądu fragmentu. W „Popraw cięcie” można podać początek i koniec w sekundach lub pobrać je z odtwarzacza. Eksport dopuszcza klipy 0,5–180 s mieszczące się w rzeczywistej długości pliku.
+
+„Utwórz zaznaczone klipy” przesyła źródło strumieniowo tylko raz dla całej partii i tworzy do 8 osobnych MP4 (H.264/AAC) oraz ZIP z plikami i manifestem `klipy.json`. Dostępne są oryginalny kadr i pion 720×1280 z pełnym obrazem na rozmytym tle (bez śledzenia twarzy). Napisy używają bieżącego szablonu, położenia i wielkości; w pionie współrzędne odnoszą się do kadru wyjściowego. Czasy napisów są przycinane do zakresu i odejmowany jest dokładny początek klipu, bez sumowania zaokrągleń. FFmpeg wykonuje dokładne cięcie przez ponowne kodowanie; preferuje NVIDIA NVENC. Nie modyfikuje oryginału.
+
+Interfejs pokazuje postęp analizy i rzeczywisty postęp kodowania, pozwala anulować zadanie, pobrać każdy MP4 lub całą paczkę ZIP. Zmiana wyglądu napisów, zakresów lub formatu usuwa stare linki z bieżącego widoku, aby wymusić ponowny eksport. Obowiązują te same zasady sprzątania wyników i brak limitu GB jak przy eksporcie napisów. Metadane JSON mają limit 20 MB. Kopia robocza wideo jest usuwana po zakończeniu, niepowodzeniu lub anulowaniu; wyniki wygasają przy sprzątaniu po godzinie w tej samej sesji backendu.
+
+Moduły: `backend/highlights.py`, `backend/highlight_model.py`, `backend/highlight_worker.py`, `backend/clip_export.py`, `backend/clip_worker.py`, `web/src/clips.js` i `web/src/clips.css`.

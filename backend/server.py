@@ -75,7 +75,10 @@ class JobManager:
                 raise HTTPException(409, "Transkrypcja została anulowana.")
             log = open(job["directory"] / "worker.log", "w", encoding="utf-8")
             try:
-                command = [sys.executable, "-m", "backend.caption_worker", str(job["directory"])] if job.get("kind") == "caption-export" else [sys.executable, "-m", "backend.worker", str(job["directory"]), language, model]
+                module = {'caption-export': 'backend.caption_worker', 'clip-export': 'backend.clip_worker', 'highlights': 'backend.highlight_worker'}.get(job.get('kind'), 'backend.worker')
+                command = [sys.executable, '-m', module, str(job['directory'])]
+                if module == 'backend.worker':
+                    command += [language, model]
                 process = subprocess.Popen(command,
                     cwd=ROOT, stdout=log, stderr=log,
                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
@@ -95,6 +98,8 @@ class JobManager:
         files = ("source.media", "audio.wav")
         if job.get("kind") == "caption-export" and job["state"] != "completed":
             files += ("captioned.mp4",)
+        if job.get('kind') == 'clip-export' and job['state'] != 'completed':
+            files += tuple(path.name for path in job['directory'].glob('clip-*.mp4')) + ('ClipsON-klipy.zip',)
         cleanup_media(job["directory"], files)
 
     def cancel(self, identifier):
@@ -116,6 +121,8 @@ class JobManager:
                     pass
             process.wait()
         cleanup_media(job["directory"], ("source.media", "audio.wav", "captioned.mp4") if job.get("kind") == "caption-export" else ("source.media", "audio.wav"))
+        if job.get('kind') == 'clip-export':
+            cleanup_media(job['directory'], tuple(path.name for path in job['directory'].glob('clip-*.mp4')) + ('ClipsON-klipy.zip',))
 
 
 manager = JobManager()
@@ -159,7 +166,9 @@ def health():
         runtime = runtime_info() if ready else {}
     except (RuntimeError, ImportError, OSError) as error:
         return {"ready": False, "engine": "whisperx", "error": str(error)}
-    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1, "captionExport": True, **runtime}
+    from backend.highlight_model import model_ready
+    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1, "captionExport": True,
+            'clipExport': True, 'highlightAI': model_ready(), **runtime}
 
 
 @app.post("/api/transcriptions", status_code=202)
@@ -287,6 +296,135 @@ def download_caption_video(identifier: str):
     if not job or job.get("kind") != "caption-export" or get_transcription(identifier)["state"] != "completed":
         raise HTTPException(404, "Film nie jest jeszcze gotowy lub eksport wygasł.")
     return FileResponse(job["directory"] / "captioned.mp4", media_type="video/mp4", filename="ClipsON-napisy.mp4")
+
+
+async def read_metadata(request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 20 * 1024 * 1024:
+            raise HTTPException(413, 'Dane tekstowe są zbyt duże. Ten limit nie dotyczy pliku wideo.')
+    try:
+        return json.loads(body)
+    except ValueError as error:
+        raise HTTPException(400, 'Nieprawidłowy plik JSON.') from error
+
+
+@app.post('/api/highlights', status_code=202)
+async def create_highlights(request: Request):
+    from backend.highlights import validate_analysis
+    from backend.highlight_model import model_ready
+    data = await read_metadata(request)
+    try:
+        options = validate_analysis(data)
+        identifier = data.get('id')
+        if not isinstance(identifier, str) or not re.fullmatch(r'[a-f0-9]{32}', identifier):
+            raise ValueError('Nieprawidłowy identyfikator analizy.')
+        if options['engine'] == 'semantic' and not model_ready():
+            raise ValueError('Pobierz lokalny model przez backend/setup-clips.ps1 lub wybierz szybką analizę tekstu.')
+    except (ValueError, TypeError) as error:
+        raise HTTPException(400, str(error)) from error
+    identifier, directory = manager.reserve(identifier, kind='highlights')
+    try:
+        (directory / 'analysis.json').write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        manager.launch(identifier)
+    except BaseException:
+        manager.jobs[identifier]['state'] = 'failed'
+        raise
+    return {'id': identifier, 'state': 'processing'}
+
+
+@app.get('/api/highlights/{identifier}')
+def highlight_status(identifier: str):
+    return get_transcription(identifier)
+
+
+@app.delete('/api/highlights/{identifier}')
+async def cancel_highlights(identifier: str):
+    await asyncio.to_thread(manager.cancel, identifier)
+    return {'state': 'cancelled'}
+
+
+clip_configs = {}
+
+
+@app.post('/api/clip-exports')
+async def prepare_clip_export(request: Request):
+    from backend.clip_export import validate_export
+    data = await read_metadata(request)
+    try:
+        payload = validate_export(data)
+        identifier = data.get('id')
+        if not isinstance(identifier, str) or not re.fullmatch(r'[a-f0-9]{32}', identifier):
+            raise ValueError('Nieprawidłowy identyfikator eksportu.')
+    except (ValueError, TypeError) as error:
+        raise HTTPException(400, str(error)) from error
+    for key, config in list(clip_configs.items()):
+        if time.time() - config['created'] > 300:
+            clip_configs.pop(key, None)
+    if len(clip_configs) >= 16 or identifier in clip_configs or identifier in manager.jobs:
+        raise HTTPException(409, 'Poczekaj na bieżący eksport lub rozpocznij nowy.')
+    clip_configs[identifier] = {'payload': payload, 'created': time.time()}
+    return {'id': identifier}
+
+
+@app.post('/api/clip-exports/{identifier}/video', status_code=202)
+async def upload_clip_video(identifier: str, request: Request):
+    config = clip_configs.pop(identifier, None)
+    if not config or time.time() - config['created'] > 300:
+        raise HTTPException(404, 'Ustawienia eksportu wygasły. Spróbuj ponownie.')
+    identifier, directory = manager.reserve(identifier, kind='clip-export')
+    written = 0
+    try:
+        (directory / 'clips.json').write_text(json.dumps(config['payload'], ensure_ascii=False), encoding='utf-8')
+        with open(directory / 'source.media', 'wb') as target:
+            async for chunk in request.stream():
+                if manager.jobs[identifier]['state'] == 'cancelled':
+                    raise HTTPException(409, 'Eksport anulowany.')
+                written += len(chunk)
+                await asyncio.to_thread(target.write, chunk)
+        if not written:
+            raise HTTPException(400, 'Ten plik jest pusty.')
+        manager.launch(identifier)
+    except BaseException:
+        manager.jobs[identifier]['state'] = 'failed'
+        cleanup_media(directory)
+        raise
+    return {'id': identifier, 'state': 'processing'}
+
+
+@app.get('/api/clip-exports/{identifier}')
+def clip_export_status(identifier: str):
+    return get_transcription(identifier)
+
+
+@app.delete('/api/clip-exports/{identifier}')
+async def cancel_clip_export(identifier: str):
+    clip_configs.pop(identifier, None)
+    await asyncio.to_thread(manager.cancel, identifier)
+    return {'state': 'cancelled'}
+
+
+def completed_clip_job(identifier):
+    job = manager.jobs.get(identifier)
+    if not job or job.get('kind') != 'clip-export' or get_transcription(identifier)['state'] != 'completed':
+        raise HTTPException(404, 'Klipy nie są jeszcze gotowe lub eksport wygasł.')
+    return job
+
+
+@app.get('/api/clip-exports/{identifier}/download')
+def download_clip_archive(identifier: str):
+    job = completed_clip_job(identifier)
+    return FileResponse(job['directory'] / 'ClipsON-klipy.zip', media_type='application/zip', filename='ClipsON-klipy.zip')
+
+
+@app.get('/api/clip-exports/{identifier}/clips/{index}')
+def download_clip(identifier: str, index: int):
+    job = completed_clip_job(identifier)
+    result = json.loads((job['directory'] / 'result.json').read_text(encoding='utf-8'))
+    if not 0 <= index < len(result['clips']):
+        raise HTTPException(404, 'Nie znaleziono klipu.')
+    return FileResponse(job['directory'] / result['clips'][index]['filename'], media_type='video/mp4', filename=f'ClipsON-{index + 1:02}.mp4')
 
 
 for filename in ("landscape.svg", "favicon.svg"):

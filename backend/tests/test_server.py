@@ -8,6 +8,21 @@ from backend import server
 
 
 class ServerTests(unittest.TestCase):
+    def test_clip_cancel_removes_source_and_partial_outputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)
+            for name in ('source.media','clip-01.mp4','ClipsON-klipy.zip'):
+                (directory/name).write_bytes(b'test')
+            from unittest.mock import MagicMock
+            process=MagicMock();process.poll.return_value=0
+            manager=server.JobManager()
+            manager.jobs['clip']={'state':'processing','directory':directory,'process':process,'kind':'clip-export'}
+            manager.cancel('clip')
+            self.assertEqual(manager.jobs['clip']['state'],'cancelled')
+            self.assertFalse((directory/'source.media').exists())
+            self.assertFalse((directory/'clip-01.mp4').exists())
+            self.assertFalse((directory/'ClipsON-klipy.zip').exists())
+
     def test_cancellation_cleanup_retries_windows_file_handle_release(self):
         with patch.object(Path, 'unlink', side_effect=[PermissionError(), None, None]) as unlink, patch.object(server.time, 'sleep'):
             self.assertTrue(server.cleanup_media(Path('unused')))

@@ -9,6 +9,14 @@ import imageio_ffmpeg
 from backend.caption_export import build_ass, validate_payload
 
 
+def choose_encoder(ffmpeg, flags):
+    probe = subprocess.run([ffmpeg, '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+        'color=s=320x180:d=0.1', '-frames:v', '1', '-c:v', 'h264_nvenc', '-f', 'null', '-'], capture_output=True, creationflags=flags)
+    if probe.returncode == 0:
+        return 'h264_nvenc', ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '20', '-b:v', '0']
+    return 'libx264', ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20']
+
+
 def write_json(path, data):
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
@@ -35,10 +43,7 @@ def run(directory):
     (directory / 'captions.ass').write_text(build_ass(payload, width, height, duration), encoding='utf-8-sig')
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-    probe = subprocess.run([ffmpeg, '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
-        'color=s=320x180:d=0.1', '-frames:v', '1', '-c:v', 'h264_nvenc', '-f', 'null', '-'], capture_output=True, creationflags=flags)
-    encoder = 'h264_nvenc' if probe.returncode == 0 else 'libx264'
-    codec = ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '20', '-b:v', '0'] if encoder == 'h264_nvenc' else ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20']
+    encoder, codec = choose_encoder(ffmpeg, flags)
     command = [ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', 'source.media',
         '-map', '0:v:0', '-map', '0:a:0?', '-vf', 'ass=captions.ass,pad=ceil(iw/2)*2:ceil(ih/2)*2',
         *codec, '-c:a', 'aac', '-b:a', '192k', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
@@ -53,6 +58,7 @@ def run(directory):
                     status('encoding', progress=min(.99, max(0, position / duration)), encoder=encoder)
                 except ValueError:
                     pass
+        process.stdout.close()
         code = process.wait()
     if code:
         raise ValueError('Nie udało się zapisać filmu. Szczegóły są w lokalnym pliku ffmpeg.log.')

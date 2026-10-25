@@ -16,18 +16,21 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
   }
   overlay.append(frame);
   let editing = false, gesture;
+  let externalBusy = false;
+  const listeners = new Set();
   let file, transcript, cues = [], enabled = true, currentCue = -1, currentWord = -1, starting = false;
   let spans = [], backendReady = false, exporting = false, exportJob, upload, timer, revision = 0;
   let content = { width: 0, height: 0 };
 
   function controls() {
-    toggle.disabled = !cues.length || exporting;
+    const locked = exporting || externalBusy;
+    toggle.disabled = !cues.length || locked;
     toggle.setAttribute('aria-checked', String(enabled && !!cues.length));
-    exportButton.disabled = !file || !cues.length || !backendReady || exporting;
+    exportButton.disabled = !file || !cues.length || !backendReady || locked;
     $('#caption-download').hidden = exporting || !$('#caption-download').hasAttribute('href');
-    document.querySelectorAll('[data-caption-preset], #caption-size, #caption-width, #caption-position, #caption-words, #caption-animation, #caption-reset').forEach(control => { control.disabled = exporting; });
-    $('#caption-edit').disabled = !cues.length || exporting;
-    frame.hidden = !editing || exporting || !enabled || !cues.length;
+    document.querySelectorAll('[data-caption-preset], #caption-size, #caption-width, #caption-position, #caption-words, #caption-animation, #caption-reset').forEach(control => { control.disabled = locked; });
+    $('#caption-edit').disabled = !cues.length || locked;
+    frame.hidden = !editing || locked || !enabled || !cues.length;
     $('#caption-hint').textContent = !transcript ? 'Wykonaj transkrypcję lub wczytaj zapisany JSON dla tego wideo.'
       : !cues.length ? 'Brak słów z ustalonym czasem. Napisy wymagają dopasowanej transkrypcji.'
       : `${cues.length} krótkich fraz · podświetlanie słowo po słowie`;
@@ -38,6 +41,7 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
     if (currentCue >= 0) update(video.currentTime, true);
   }
   function invalidateExport() {
+    listeners.forEach(listener => listener());
     if (!exporting && $('#caption-download').hasAttribute('href')) {
       $('#caption-download').removeAttribute('href'); $('#caption-download').hidden = true;
       $('#caption-export-status').textContent = 'Wygląd zmieniony. Wyeksportuj nową wersję filmu.';
@@ -96,7 +100,7 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
     currentCue = -1; currentWord = -1;
     update(video.currentTime, true); controls();
   }
-  toggle.addEventListener('click', () => { enabled = !enabled; controls(); update(); });
+  toggle.addEventListener('click', () => { enabled = !enabled; invalidateExport(); controls(); update(); });
   document.querySelectorAll('[data-caption-preset]').forEach(button => button.addEventListener('click', () => {
     settings.preset = button.dataset.captionPreset;
     document.querySelectorAll('[data-caption-preset]').forEach(option => option.setAttribute('aria-pressed', String(option === button)));
@@ -122,7 +126,7 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
   });
   function changed() { settings.position = 'custom'; invalidateExport(); update(video.currentTime, true); }
   frame.addEventListener('pointerdown', event => {
-    if (!editing || exporting || event.button !== 0) return;
+    if (!editing || exporting || externalBusy || event.button !== 0) return;
     event.preventDefault(); frame.focus({ preventScroll: true });
     gesture = { id: event.pointerId, clientX: event.clientX, clientY: event.clientY, settings: { ...settings },
       width: content.width, height: content.height, handle: event.target.dataset.handle || 'move' };
@@ -149,7 +153,7 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) frame.addEventListener(event, finishGesture);
   frame.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); edit(false); $('#caption-edit').focus(); return; }
-    if (!event.key.startsWith('Arrow') || exporting) return;
+    if (!event.key.startsWith('Arrow') || exporting || externalBusy) return;
     event.preventDefault(); const step = event.shiftKey ? .025 : .005;
     if (event.target.dataset.handle) {
       if (['e', 'w'].includes(event.target.dataset.handle)) settings.width += ['ArrowUp', 'ArrowRight'].includes(event.key) ? step : -step;
@@ -200,7 +204,7 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
     } catch (error) { if (version === revision) exportError(error.message); }
   }
   exportButton.addEventListener('click', async () => {
-    if (!file || !cues.length || exporting || starting) return;
+    if (!file || !cues.length || exporting || starting || externalBusy) return;
     starting = true;
     const chosenFile = file;
     await cancelExport();
@@ -238,6 +242,10 @@ export function createCaptionEditor(video, api, onExportBusy = () => {}) {
   configure();
   return {
     update,
+    getExportState() { return { enabled: enabled && !!cues.length, settings: { ...settings }, cues: structuredClone(cues) }; },
+    stopEditing() { if (editing) edit(false); },
+    onChange(listener) { listeners.add(listener); },
+    setExternalBusy(value) { externalBusy = value; controls(); },
     setBackendReady(value) { backendReady = value; controls(); },
     setFile(value) {
       void cancelExport(); file = value; transcript = undefined; cues = []; currentCue = -1; currentWord = -1;
