@@ -1,0 +1,7 @@
+whisperx==3.8.6
+imageio-ffmpeg==0.6.0
+soundfile>=0.13,<1
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+# WhisperX 3.8 uses the Transformers 4 API.
+transformers>=4.48,<5

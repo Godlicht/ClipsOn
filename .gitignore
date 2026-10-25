@@ -3,3 +3,7 @@ clipson-deploy.tar.gz
 web/dist/
 web/node_modules/
 *.log
+backend/.venv/
+backend/.runtime/
+__pycache__/
+*.pyc

@@ -1,3 +1,5 @@
+import { createTranscription } from './transcription.js';
+
 const $ = (selector) => document.querySelector(selector);
 const themeButton = $('.theme-toggle');
 function updateThemeButton() {
@@ -60,6 +62,7 @@ const uploadDialog = $('#upload-dialog');
 const demoDialog = $('#demo-dialog');
 const fileInput = $('#video-input');
 const video = $('#local-video');
+const transcription = createTranscription(video);
 const dropzone = $('#dropzone');
 const error = $('#upload-error');
 let objectURL;
@@ -70,6 +73,7 @@ function openDialog(dialog, trigger) {
   lastTrigger = trigger || document.activeElement;
   stopAnimation();
   dialog.showModal();
+  if (dialog === uploadDialog) void transcription.health();
 }
 document.querySelectorAll('[data-upload]').forEach((button) => {
   button.addEventListener('click', () => openDialog(uploadDialog, button));
@@ -109,6 +113,7 @@ function selectFile(file) {
   video.load();
   if (objectURL) URL.revokeObjectURL(objectURL);
   selectedFile = file;
+  transcription.setFile(file);
   objectURL = URL.createObjectURL(file);
   $('#file-name').textContent = file.name;
   $('#file-info').textContent = `${readableSize(file.size)} · Lokalny podgląd`;

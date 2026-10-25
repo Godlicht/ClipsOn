@@ -7,6 +7,7 @@
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs --production",
-    "check": "node --check src/app.js"
+    "check": "node --check src/app.js && node --check src/transcription.js && node --check src/transcript-utils.js",
+    "test": "node --test tests/*.test.js"
   }
 }
