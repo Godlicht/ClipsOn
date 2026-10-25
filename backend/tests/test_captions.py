@@ -49,5 +49,13 @@ class CaptionTests(unittest.TestCase):
             data=payload();data['settings'][key]=value
             with self.assertRaises(ValueError):validate_payload(data)
 
+    def test_pink_and_red_presets_have_no_opaque_background(self):
+        for preset,colour in [('pink','C763FF'),('red','5C4BFF')]:
+            data=payload();data['settings']['preset']=preset
+            document=build_ass(validate_payload(data),1920,1080,4000)
+            style=next(line for line in document.splitlines() if line.startswith('Style: Default,')).split(',')
+            self.assertEqual(style[15],'1')
+            self.assertIn('\\1c&H'+colour+'&',document)
+
 
 if __name__=='__main__':unittest.main()

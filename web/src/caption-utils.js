@@ -7,9 +7,9 @@ export const CAPTION_PRESETS = {
   'box-violet': { name: 'Fioletowy puls', accent: '#c49aff', box: true },
   'box-cyan': { name: 'Błękitny akcent', accent: '#48dfff', box: true },
   'box-green': { name: 'Limonka', accent: '#b7ff5b', box: true },
-  paper: { name: 'Jasna karta', accent: '#d92b70', text: '#16131d', background: '#ffffff', box: true },
+  pink: { name: 'Różowy obrys', accent: '#ff63c7', box: false },
   neon: { name: 'Neon', accent: '#48dfff', box: false },
-  minimal: { name: 'Minimal', accent: '#ffffff', text: '#bdbdc9', box: false },
+  red: { name: 'Czerwony obrys', accent: '#ff4b5c', box: false },
 };
 
 export function buildCaptionCues(transcript, maxWords = 4) {

@@ -3,7 +3,7 @@ import math
 
 PRESETS = {"box-yellow": "47E4FF", "box-red": "5C4BFF", "outline": "47E4FF",
            "box-violet": "FF9AC4", "box-cyan": "FFDF48", "box-green": "5BFFB7",
-           "paper": "702BD9", "neon": "FFDF48", "minimal": "FFFFFF"}
+           "pink": "C763FF", "neon": "FFDF48", "red": "5C4BFF"}
 
 
 def number(value):
@@ -108,7 +108,7 @@ def cue_intervals(cue, end):
 def build_ass(payload, width, height, duration):
     settings, cues = payload["settings"], payload["cues"]
     preset = settings["preset"]
-    outlined = preset in {'outline', 'neon', 'minimal'}
+    outlined = preset in {'outline', 'neon', 'pink', 'red'}
     border = 1 if outlined else 3
     default_size = height * settings["size"] / 100
     outline = default_size * (.055 if outlined else .12)
@@ -117,8 +117,8 @@ def build_ass(payload, width, height, duration):
     max_height = max(.04, max(layout[2] / height for layout in layouts))
     x = max(settings['width'] / 2 + .02, min(.98 - settings['width'] / 2, settings['x']))
     y = max(max_height / 2 + .02, min(.98 - max_height / 2, settings['y']))
-    text_colour = '1D1316' if preset == 'paper' else 'C9BDBD' if preset == 'minimal' else 'FFFFFF'
-    back_colour = '00FFFFFF' if preset == 'paper' else '20000000'
+    text_colour = 'FFFFFF'
+    back_colour = '20000000'
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
