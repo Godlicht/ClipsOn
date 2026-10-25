@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from backend.timing import normalize_segments, restore_word_order
+from backend.runtime import runtime_info
 
 CHUNK_SECONDS = 300
 
@@ -18,8 +19,9 @@ def write_json(path, data):
 
 
 def run(job_dir, language="pl", model_name="large-v3"):
+    runtime = {}
     def status(stage, **extra):
-        write_json(job_dir / "status.json", {"state": "processing", "stage": stage, **extra})
+        write_json(job_dir / "status.json", {"state": "processing", "stage": stage, **runtime, **extra})
 
     # HF caches live inside the project. Recordings are never uploaded to HF.
     cache = job_dir.parent.parent / "models"
@@ -41,11 +43,10 @@ def run(job_dir, language="pl", model_name="large-v3"):
     status("loading")
     import numpy as np
     import torch
+    runtime = runtime_info()
+    device, compute_type = runtime["device"], runtime["computeType"]
+    status("loading")
     import whisperx
-    device = os.environ.get("CLIPSON_DEVICE", "cpu")
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else "int8"
     model = whisperx.load_model(model_name, device, compute_type=compute_type,
                                 language=None if language == "auto" else language,
                                 vad_method="silero", download_root=str(cache / "whisper"),
@@ -106,7 +107,7 @@ def run(job_dir, language="pl", model_name="large-v3"):
     all_segments.sort(key=lambda segment: segment["start"])
     missing = sum(word["start"] is None for segment in all_segments for word in segment["words"])
     write_json(job_dir / "result.json", {"version": 1, "timebase": "source-media-seconds",
-               "engine": "whisperx", "model": model_name, "language": detected_language or language,
+               "engine": "whisperx", "model": model_name, **runtime, "language": detected_language or language,
                "duration": round(duration, 3), "alignment": "forced", "unalignedWords": missing,
                "segments": all_segments})
     status("finished", state="completed")

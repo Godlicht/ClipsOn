@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import importlib.util
+from functools import lru_cache
 import json
 import os
 import re
@@ -26,6 +27,21 @@ TERMINAL = {"completed", "failed", "cancelled"}
 LANGUAGES = {"pl", "en", "de", "es", "fr", "uk", "auto"}
 MODELS = {"large-v3", "medium"}
 ALLOWED_ORIGINS = ["https://clipson-studio.earthyash12.chatgpt.site", "http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:8765", "http://localhost:8765"]
+
+
+def cleanup_media(directory):
+    # Windows may release a terminated child's file handles slightly later
+    # than process.wait(). Do not turn a successful cancellation into HTTP 500.
+    for name in ("source.media", "audio.wav"):
+        for attempt in range(20):
+            try:
+                (directory / name).unlink(missing_ok=True)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    return False
+                time.sleep(0.1)
+    return True
 
 
 class JobManager:
@@ -75,8 +91,7 @@ class JobManager:
             if job["state"] != "cancelled":
                 job["state"] = "completed" if code == 0 and (job["directory"] / "result.json").exists() else "failed"
             # Original video and extracted audio are temporary, even on errors.
-            for name in ("source.media", "audio.wav"):
-                (job["directory"] / name).unlink(missing_ok=True)
+        cleanup_media(job["directory"])
 
     def cancel(self, identifier):
         job = self.jobs.get(identifier)
@@ -96,8 +111,7 @@ class JobManager:
                 except ProcessLookupError:
                     pass
             process.wait()
-        for name in ("source.media", "audio.wav"):
-            (job["directory"] / name).unlink(missing_ok=True)
+        cleanup_media(job["directory"])
 
 
 manager = JobManager()
@@ -105,6 +119,7 @@ manager = JobManager()
 
 @asynccontextmanager
 async def lifespan(_app):
+    await asyncio.to_thread(health)
     yield
     for identifier in list(manager.jobs):
         manager.cancel(identifier)
@@ -132,9 +147,15 @@ async def local_access(request, call_next):
 
 
 @app.get("/api/health")
+@lru_cache(maxsize=1)
 def health():
     ready = all(importlib.util.find_spec(module) for module in ("whisperx", "imageio_ffmpeg", "soundfile"))
-    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1}
+    from backend.runtime import runtime_info
+    try:
+        runtime = runtime_info() if ready else {}
+    except (RuntimeError, ImportError, OSError) as error:
+        return {"ready": False, "engine": "whisperx", "error": str(error)}
+    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1, **runtime}
 
 
 @app.post("/api/transcriptions", status_code=202)

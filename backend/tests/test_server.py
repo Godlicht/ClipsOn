@@ -8,6 +8,11 @@ from backend import server
 
 
 class ServerTests(unittest.TestCase):
+    def test_cancellation_cleanup_retries_windows_file_handle_release(self):
+        with patch.object(Path, 'unlink', side_effect=[PermissionError(), None, None]) as unlink, patch.object(server.time, 'sleep'):
+            self.assertTrue(server.cleanup_media(Path('unused')))
+            self.assertEqual(unlink.call_count, 3)
+
     def test_completion_poll_always_contains_result_even_before_process_exit(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

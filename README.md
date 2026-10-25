@@ -16,7 +16,7 @@ Otwórz http://127.0.0.1:8765, dodaj film i wybierz „Wykonaj transkrypcję”.
 
 Na Windows dostępne są też skrypty `backend/setup.ps1` (instalacja) oraz `backend/run.ps1` (uruchomienie). Po restarcie komputera wystarczy ponownie uruchomić serwer. Modele pobierają się przy pierwszej transkrypcji i zajmują kilka GB miejsca. Nagrania nie są wysyłane do Hugging Face ani innych usług zewnętrznych.
 
-Domyślnie używany jest **Whisper large-v3** i dopasowanie fonetyczne do języka. Model polski: `jonatasgrosman/wav2vec2-large-xlsr-53-polish`. CPU (`int8`) działa bez CUDA, ale długie materiały mogą przetwarzać się dłużej niż ich czas odtwarzania. Model Medium jest lżejszą opcją. Opcjonalne GPU wymaga zgodnego środowiska PyTorch/CUDA i ustawienia `CLIPSON_DEVICE=cuda` lub `auto` przed uruchomieniem serwera. Aplikacja nie instaluje CUDA automatycznie.
+Domyślnie używany jest **Whisper large-v3** i dopasowanie fonetyczne do języka. Model polski: `jonatasgrosman/wav2vec2-large-xlsr-53-polish`. Domyślne urządzenie to `auto`: NVIDIA GPU, gdy oba silniki widzą CUDA, albo CPU (`int8`). GPU używa `float16` do rozpoznawania mowy; dopasowanie fonetyczne również działa na GPU. Rzeczywiste urządzenie jest widoczne w interfejsie i zapisywane w wyniku JSON. Wymuszone `CLIPSON_DEVICE=cuda` zgłasza błąd zamiast przechodzić po cichu na CPU.
 
 ## Synchronizacja i dokładność
 
@@ -72,3 +72,13 @@ Testy obejmują czas słów i ciszę, długie nagrania, zachowanie niedopasowany
 - `backend/media.py`, `backend/timing.py` — zegar audio i scalanie czasów słów.
 
 Dokumentacja silnika: https://github.com/m-bain/whisperX. Fonty Manrope i DM Sans pochodzą z Google Fonts; ilustracje i ikony to lokalne SVG.
+
+## Przyspieszenie NVIDIA GPU
+
+`backend/setup.ps1` domyślnie wykrywa kartę NVIDIA i instaluje zgodny z WhisperX PyTorch 2.8 z CUDA 12.8. Można wymusić `-Device cuda` lub wybrać `-Device cpu`. Bez skryptu, po instalacji requirements:
+
+```powershell
+backend/.venv/Scripts/python.exe -m pip install --upgrade torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+`backend/run.ps1 -Device cuda` wymaga GPU. Zwykłe uruchomienie i domyślne `-Device auto` wybierają dostępny sprzęt. Biblioteki cuBLAS/cuDNN z pakietu PyTorch udostępniamy procesowi CTranslate2 bez zmiany systemowego PATH i bez instalacji pełnego CUDA Toolkit. Sterownik NVIDIA musi być zgodny z CUDA 12.8. Plik `backend/runtime.py` sprawdza dostępność CUDA w PyTorch i CTranslate2, ponieważ samo wykrycie karty przez sterownik nie wystarcza.

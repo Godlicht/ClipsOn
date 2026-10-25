@@ -21,6 +21,11 @@ export function createTranscription(video) {
   let activeRow;
 
   function announce(message) { $('#transcription-announcement').textContent = message; }
+  function deviceLabel(data) {
+    return data.device === 'cuda'
+      ? `${(data.deviceName || 'NVIDIA').replace('NVIDIA GeForce ', '')} · GPU`
+      : data.device === 'cpu' ? 'WhisperX · CPU' : 'WhisperX · połączono';
+  }
   function updateControls() {
     startButton.disabled = !file || !ready || running;
     $('#transcript-language').disabled = running;
@@ -47,12 +52,14 @@ export function createTranscription(video) {
     if (checking) return;
     checking = true;
     $('#engine-status').textContent = 'Łączenie z silnikiem…';
+    let runtime;
     try {
       const response = await fetch(`${api}/api/health`, { signal: AbortSignal.timeout(4000) });
       const data = await response.json();
+      runtime = data;
       ready = response.ok && data.ready && data.engine === 'whisperx';
     } catch { ready = false; }
-    $('#engine-status').textContent = ready ? 'WhisperX · połączono' : 'WhisperX · offline';
+    $('#engine-status').textContent = ready ? deviceLabel(runtime) : 'WhisperX · offline';
     $('#engine-status').classList.toggle('connected', ready);
     $('#engine-setup').hidden = ready;
     checking = false;
@@ -161,6 +168,7 @@ export function createTranscription(video) {
       const data = await response.json();
       if (requestRevision !== revision) return;
       if (!response.ok) throw new Error(data.detail || 'Nie udało się odczytać transkrypcji.');
+      if (data.device) $('#engine-status').textContent = deviceLabel(data);
       if (terminalStates.has(data.state)) {
         currentJob = undefined;
         if (data.state === 'completed') render(data.result);
