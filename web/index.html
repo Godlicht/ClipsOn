@@ -10,6 +10,7 @@
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('clipson-theme')||'dark'}catch{}</script>
   <link rel="stylesheet" href="/src/styles.css" />
   <link rel="stylesheet" href="/src/transcription.css" />
+  <link rel="stylesheet" href="/src/captions.css" />
   <script src="/src/app.js" type="module"></script>
 </head>
 <body>
@@ -78,10 +79,26 @@
         <div class="dropzone" id="dropzone"><div class="upload-circle"><svg><use href="#i-upload"/></svg></div><strong>Przeciągnij tutaj swoje wideo</strong><span>lub wybierz je z dysku</span><button class="button button-small" id="choose-file">Wybierz plik <svg><use href="#i-arrow"/></svg></button><span class="file-types">MP4, MOV, WEBM, MKV</span></div>
         <input type="file" id="video-input" accept="video/*,.mkv,.mov" hidden/>
         <p class="upload-error" id="upload-error" role="alert" hidden></p>
-        <div id="uploaded-preview" hidden><video id="local-video" controls playsinline preload="metadata"></video><div class="file-details"><svg><use href="#i-file"/></svg><div><strong id="file-name"></strong><span id="file-info"></span></div><button class="button-text" id="change-file">Zmień plik</button></div></div>
+        <div id="uploaded-preview" hidden><div class="caption-stage" id="caption-stage"><video id="local-video" controls controlslist="nofullscreen" playsinline preload="metadata"></video><div class="caption-overlay" id="caption-overlay" aria-hidden="true" hidden><div class="caption-line" id="caption-line"></div></div><button type="button" class="caption-fullscreen" id="caption-fullscreen" aria-label="Pełny ekran z napisami" title="Pełny ekran z napisami"><svg><use href="#i-frame"/></svg></button></div><div class="file-details"><svg><use href="#i-file"/></svg><div><strong id="file-name"></strong><span id="file-info"></span></div><button class="button-text" id="change-file">Zmień plik</button></div>
+        <section class="caption-editor" id="caption-editor" aria-labelledby="caption-editor-title" hidden>
+          <div class="caption-editor-header"><h3 id="caption-editor-title"><svg><use href="#i-spark"/></svg> Animowane napisy</h3><button type="button" class="transcript-toggle" id="caption-toggle" role="switch" aria-label="Napisy na wideo" aria-checked="false" disabled><span class="transcript-toggle-track" aria-hidden="true"><span></span></span></button></div>
+          <details class="caption-options" id="caption-options"><summary>Dostosuj wygląd <span>3 szablony <span aria-hidden="true">⌄</span></span></summary>
+            <div class="caption-presets" role="group" aria-label="Szablon napisów">
+              <button type="button" class="caption-preset" data-caption-preset="box-yellow" aria-pressed="true"><span class="preset-sample sample-yellow">Twoja <b>historia</b></span><span>Żółty akcent</span></button>
+              <button type="button" class="caption-preset" data-caption-preset="box-red" aria-pressed="false"><span class="preset-sample sample-red">Twoja <b>historia</b></span><span>Czerwony akcent</span></button>
+              <button type="button" class="caption-preset" data-caption-preset="outline" aria-pressed="false"><span class="preset-sample sample-outline">Twoja <b>historia</b></span><span>Klasyczny obrys</span></button>
+            </div>
+            <div class="caption-settings"><label class="caption-size-label">Wielkość <output id="caption-size-value" for="caption-size">6.5%</output><input type="range" id="caption-size" min="4" max="10" step="0.5" value="6.5" aria-label="Wielkość napisów"/></label><label>Położenie<select id="caption-position"><option value="bottom">Na dole</option><option value="middle">Na środku</option><option value="top">Na górze</option></select></label><label>Słów na ekranie<select id="caption-words"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label><label class="caption-animation-label"><input type="checkbox" id="caption-animation" checked/> Delikatny efekt pop</label></div>
+          </details>
+          <p class="caption-hint" id="caption-hint">Wykonaj transkrypcję, aby dodać napisy.</p>
+          <div class="caption-export-actions"><button type="button" class="button button-small" id="caption-export" disabled>Eksportuj film z napisami <svg><use href="#i-arrow"/></svg></button><a class="button-text" id="caption-download" download="ClipsON-napisy.mp4" hidden>Pobierz MP4 ↓</a><button type="button" class="button-text" id="caption-export-cancel" hidden>Anuluj eksport</button></div>
+          <p class="caption-export-status" id="caption-export-status" role="status"></p>
+        </section>
+        </div>
         <div class="transcription-options"><label>Język nagrania<select id="transcript-language"><option value="pl">Polski</option><option value="auto">Wykryj automatycznie</option><option value="en">Angielski</option><option value="de">Niemiecki</option><option value="uk">Ukraiński</option><option value="es">Hiszpański</option><option value="fr">Francuski</option></select></label><label>Model rozpoznawania<select id="transcript-model"><option value="large-v3">Large v3 · dokładniejszy</option><option value="medium">Medium · lżejszy</option></select></label></div>
         <button class="button transcribe-button" id="transcribe-button" disabled><svg><use href="#i-spark"/></svg> Wykonaj transkrypcję <svg><use href="#i-arrow"/></svg></button>
         <div class="timing-note"><svg><use href="#i-check"/></svg><span>Dopasowanie do dźwięku <strong>słowo po słowie.</strong><br/>Oryginalne znaczniki czasu zostają zachowane.</span></div>
+        <div class="transcript-import"><button type="button" class="button-text" id="import-transcript" disabled>Wczytaj transkrypcję JSON <svg><use href="#i-upload"/></svg></button><span>Dla tego samego wideo</span><input type="file" id="transcript-input" accept="application/json,.json" hidden/></div>
       </section>
       <section class="transcription-panel" id="transcription-panel" aria-labelledby="transcript-heading" aria-busy="false">
         <div class="transcript-panel-header"><h3 id="transcript-heading"><svg><use href="#i-text"/></svg> Transkrypcja</h3><span class="engine-badge" id="engine-status">WhisperX · lokalnie</span></div>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeWordIndex, isTimedWord, timeLabel } from '../src/transcript-utils.js';
+import { activeWordIndex, isTimedWord, timeLabel, validateTranscriptImport } from '../src/transcript-utils.js';
 
 test('source-clock highlighting excludes silence and uses exclusive end times', () => {
   const words = [{ start: 1.25, end: 1.739 }, { start: 3.012, end: 3.9 }, { start: 3601.002, end: 3601.22 }];
@@ -26,4 +26,11 @@ test('time labels retain hour and millisecond accuracy across long videos', () =
   assert.equal(timeLabel(3661.027, true), '01:01:01.027');
   assert.equal(timeLabel(59.9996, true), '01:00.000');
   assert.equal(timeLabel(0), '00:00');
+});
+
+test('import preserves source timestamps and rejects a transcript longer than the video', () => {
+  const data={version:1,timebase:'source-media-seconds',language:'pl',duration:10,segments:[{start:1,end:2,text:'Test',words:[{text:'Test',start:1,end:2}]}]};
+  assert.equal(validateTranscriptImport(data,10),data);
+  assert.throws(()=>validateTranscriptImport(data,3));
+  assert.throws(()=>validateTranscriptImport({...data,timebase:'estimated'},10));
 });

@@ -1,4 +1,5 @@
-import { activeWordIndex, isTimedWord, timeLabel } from './transcript-utils.js';
+import { activeWordIndex, isTimedWord, timeLabel, validateTranscriptImport } from './transcript-utils.js';
+import { createCaptionEditor } from './captions.js';
 
 const terminalStates = new Set(['completed', 'failed', 'cancelled']);
 const stages = {
@@ -16,6 +17,8 @@ export function createTranscription(video) {
   // Local API only: media is never posted to the static hosting service.
   const api = ['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '8765'
     ? location.origin : 'http://127.0.0.1:8765';
+  let captionExporting = false;
+  const captionEditor = createCaptionEditor(video, api, value => { captionExporting = value; updateControls(); });
   let file, ready = false, running = false, revision = 0, currentJob, upload;
   let pollTimer, frame, transcript, timedWords = [], active = -1, checking = false, launching = false;
   let activeRow;
@@ -68,10 +71,11 @@ export function createTranscription(video) {
       : data.device === 'cpu' ? 'WhisperX · CPU' : 'WhisperX · połączono';
   }
   function updateControls() {
-    startButton.disabled = !file || !ready || running;
+    startButton.disabled = !file || !ready || running || captionExporting;
     $('#transcript-language').disabled = running;
     $('#transcript-model').disabled = running;
     $('#download-transcript').hidden = !transcript;
+    $('#import-transcript').disabled = !file || running || captionExporting;
   }
   function busy(value) {
     running = value;
@@ -81,6 +85,7 @@ export function createTranscription(video) {
   }
   function reset() {
     transcript = undefined; timedWords = []; active = -1; activeRow = undefined;
+    captionEditor.setTranscript(undefined);
     followPlayback = true;
     updateFollowControls();
     results.replaceChildren(); results.hidden = true;
@@ -104,6 +109,7 @@ export function createTranscription(video) {
     } catch { ready = false; }
     $('#engine-status').textContent = ready ? deviceLabel(runtime) : 'WhisperX · offline';
     $('#engine-status').classList.toggle('connected', ready);
+    captionEditor.setBackendReady(ready && !!runtime?.captionExport);
     $('#engine-setup').hidden = ready;
     checking = false;
     updateControls();
@@ -134,6 +140,7 @@ export function createTranscription(video) {
   }
   function render(data) {
     transcript = data;
+    captionEditor.setTranscript(data);
     timedWords = [];
     const fragment = document.createDocumentFragment();
     data.segments.forEach((segment) => {
@@ -179,6 +186,7 @@ export function createTranscription(video) {
     updateHighlight();
   }
   function updateHighlight() {
+    captionEditor.update(video.currentTime);
     const index = activeWordIndex(timedWords, video.currentTime);
     if (index === active) return;
     if (active >= 0) timedWords[active]?.element.classList.remove('current-word');
@@ -283,6 +291,23 @@ export function createTranscription(video) {
     await cancel(); $('#transcript-empty').hidden = false; announce('Transkrypcja anulowana.');
   });
   $('#check-engine').addEventListener('click', health);
+  $('#import-transcript').addEventListener('click', () => $('#transcript-input').click());
+  $('#transcript-input').addEventListener('change', async event => {
+    const source = event.target.files[0], chosenFile = file;
+    event.target.value = '';
+    if (!source || !chosenFile || running || captionExporting) return;
+    try {
+      if (source.size > 20 * 1024 * 1024) throw new Error('Plik JSON może mieć do 20 MB. Ten limit nie dotyczy wideo.');
+      const data = validateTranscriptImport(JSON.parse(await source.text()), video.duration);
+      if (chosenFile !== file || running || captionExporting) return;
+      $('#upload-error').hidden = true;
+      $('#transcription-error').hidden = true;
+      render(data);
+    } catch (error) {
+      $('#upload-error').textContent = error.message;
+      $('#upload-error').hidden = false;
+    }
+  });
   $('#download-transcript').addEventListener('click', () => {
     if (!transcript) return;
     const blob = new Blob([JSON.stringify(transcript, null, 2)], { type: 'application/json' });
@@ -292,6 +317,6 @@ export function createTranscription(video) {
   });
   return {
     health,
-    setFile(nextFile) { void cancel(); file = nextFile; reset(); },
+    setFile(nextFile) { void cancel(); file = nextFile; captionEditor.setFile(nextFile); reset(); },
   };
 }

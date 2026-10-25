@@ -21,3 +21,21 @@ export function activeWordIndex(words, time) {
   }
   return result >= 0 && time < words[result].end ? result : -1;
 }
+
+export function validateTranscriptImport(data, videoDuration) {
+  const fail = () => { throw new Error('Wybierz transkrypcję JSON zapisaną przez ClipsON dla tego samego wideo.'); };
+  if (!data || data.version !== 1 || data.timebase !== 'source-media-seconds' || !Array.isArray(data.segments)
+      || !Number.isFinite(data.duration) || data.duration < 0 || typeof data.language !== 'string') fail();
+  if (Number.isFinite(videoDuration) && data.duration > videoDuration + 1) {
+    throw new Error('Ta transkrypcja jest dłuższa od wybranego wideo. Wczytaj wynik dla tego samego nagrania.');
+  }
+  for (const segment of data.segments) {
+    if (!segment || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.start < 0
+        || segment.end <= segment.start || typeof segment.text !== 'string' || !Array.isArray(segment.words)) fail();
+    for (const word of segment.words) {
+      if (!word || typeof word.text !== 'string' || (!isTimedWord(word) && !(word.start === null && word.end === null))) fail();
+      if (isTimedWord(word) && (word.start < segment.start || word.end > segment.end)) fail();
+    }
+  }
+  return data;
+}

@@ -29,10 +29,10 @@ MODELS = {"large-v3", "medium"}
 ALLOWED_ORIGINS = ["https://clipson-studio.earthyash12.chatgpt.site", "http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:8765", "http://localhost:8765"]
 
 
-def cleanup_media(directory):
+def cleanup_media(directory, names=("source.media", "audio.wav")):
     # Windows may release a terminated child's file handles slightly later
     # than process.wait(). Do not turn a successful cancellation into HTTP 500.
-    for name in ("source.media", "audio.wav"):
+    for name in names:
         for attempt in range(20):
             try:
                 (directory / name).unlink(missing_ok=True)
@@ -49,7 +49,7 @@ class JobManager:
         self.jobs = {}
         self.lock = threading.Lock()
 
-    def reserve(self, identifier=None):
+    def reserve(self, identifier=None, kind="transcription"):
         with self.lock:
             self.cleanup()
             if any(job["state"] not in TERMINAL for job in self.jobs.values()):
@@ -59,7 +59,7 @@ class JobManager:
                 raise HTTPException(400, "Nieprawidłowy identyfikator zadania.")
             directory = JOBS / identifier
             directory.mkdir()
-            self.jobs[identifier] = {"state": "uploading", "directory": directory, "process": None, "created": time.time()}
+            self.jobs[identifier] = {"state": "uploading", "directory": directory, "process": None, "created": time.time(), "kind": kind}
             return identifier, directory
 
     def cleanup(self):
@@ -68,14 +68,15 @@ class JobManager:
                 shutil.rmtree(job["directory"], ignore_errors=True)
                 del self.jobs[identifier]
 
-    def launch(self, identifier, language, model):
+    def launch(self, identifier, language=None, model=None):
         job = self.jobs[identifier]
         with self.lock:
             if job["state"] == "cancelled":
                 raise HTTPException(409, "Transkrypcja została anulowana.")
             log = open(job["directory"] / "worker.log", "w", encoding="utf-8")
             try:
-                process = subprocess.Popen([sys.executable, "-m", "backend.worker", str(job["directory"]), language, model],
+                command = [sys.executable, "-m", "backend.caption_worker", str(job["directory"])] if job.get("kind") == "caption-export" else [sys.executable, "-m", "backend.worker", str(job["directory"]), language, model]
+                process = subprocess.Popen(command,
                     cwd=ROOT, stdout=log, stderr=log,
                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
                     start_new_session=os.name != "nt")
@@ -91,11 +92,14 @@ class JobManager:
             if job["state"] != "cancelled":
                 job["state"] = "completed" if code == 0 and (job["directory"] / "result.json").exists() else "failed"
             # Original video and extracted audio are temporary, even on errors.
-        cleanup_media(job["directory"])
+        files = ("source.media", "audio.wav")
+        if job.get("kind") == "caption-export" and job["state"] != "completed":
+            files += ("captioned.mp4",)
+        cleanup_media(job["directory"], files)
 
     def cancel(self, identifier):
         job = self.jobs.get(identifier)
-        if job is None:
+        if job is None or job["state"] in TERMINAL:
             return
         with self.lock:
             job["state"] = "cancelled"
@@ -111,7 +115,7 @@ class JobManager:
                 except ProcessLookupError:
                     pass
             process.wait()
-        cleanup_media(job["directory"])
+        cleanup_media(job["directory"], ("source.media", "audio.wav", "captioned.mp4") if job.get("kind") == "caption-export" else ("source.media", "audio.wav"))
 
 
 manager = JobManager()
@@ -155,7 +159,7 @@ def health():
         runtime = runtime_info() if ready else {}
     except (RuntimeError, ImportError, OSError) as error:
         return {"ready": False, "engine": "whisperx", "error": str(error)}
-    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1, **runtime}
+    return {"ready": ready, "engine": "whisperx", "local": True, "version": 1, "captionExport": True, **runtime}
 
 
 @app.post("/api/transcriptions", status_code=202)
@@ -208,6 +212,81 @@ def get_transcription(identifier: str):
 async def cancel_transcription(identifier: str):
     await asyncio.to_thread(manager.cancel, identifier)
     return {"state": "cancelled"}
+
+
+# Export settings arrive separately so the video itself can still stream to
+# disk without multipart buffering or a size limit imposed by the app.
+caption_configs = {}
+
+
+@app.post("/api/caption-exports")
+async def prepare_caption_export(request: Request):
+    from backend.caption_export import validate_payload
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 20 * 1024 * 1024:
+            raise HTTPException(413, "Dane napisów są zbyt duże. Limit dotyczy tekstu, nie wideo.")
+    try:
+        data = json.loads(body)
+        identifier = data.get("id", "")
+        if not isinstance(identifier, str) or not re.fullmatch(r"[a-f0-9]{32}", identifier):
+            raise ValueError("Nieprawidłowy identyfikator eksportu.")
+        payload = validate_payload(data)
+    except (ValueError, TypeError, AttributeError) as error:
+        raise HTTPException(400, str(error)) from error
+    for key, config in list(caption_configs.items()):
+        if time.time() - config["created"] > 300:
+            caption_configs.pop(key, None)
+    if len(caption_configs) >= 16 or identifier in caption_configs or identifier in manager.jobs:
+        raise HTTPException(409, "Poczekaj na bieżący eksport lub rozpocznij nowy.")
+    caption_configs[identifier] = {"payload": payload, "created": time.time()}
+    return {"id": identifier}
+
+
+@app.post("/api/caption-exports/{identifier}/video", status_code=202)
+async def upload_caption_video(identifier: str, request: Request):
+    config = caption_configs.pop(identifier, None)
+    if not config or time.time() - config["created"] > 300:
+        raise HTTPException(404, "Ustawienia eksportu wygasły. Spróbuj ponownie.")
+    identifier, directory = manager.reserve(identifier, kind="caption-export")
+    (directory / "captions.json").write_text(json.dumps(config["payload"], ensure_ascii=False), encoding="utf-8")
+    written = 0
+    try:
+        with open(directory / "source.media", "wb") as target:
+            async for chunk in request.stream():
+                if manager.jobs[identifier]["state"] == "cancelled":
+                    raise HTTPException(409, "Eksport został anulowany.")
+                written += len(chunk)
+                await asyncio.to_thread(target.write, chunk)
+        if not written:
+            raise HTTPException(400, "Ten plik jest pusty.")
+        manager.launch(identifier)
+    except BaseException:
+        manager.jobs[identifier]["state"] = "failed"
+        cleanup_media(directory)
+        raise
+    return {"id": identifier, "state": "processing"}
+
+
+@app.get("/api/caption-exports/{identifier}")
+def caption_export_status(identifier: str):
+    return get_transcription(identifier)
+
+
+@app.delete("/api/caption-exports/{identifier}")
+async def cancel_caption_export(identifier: str):
+    caption_configs.pop(identifier, None)
+    await asyncio.to_thread(manager.cancel, identifier)
+    return {"state": "cancelled"}
+
+
+@app.get("/api/caption-exports/{identifier}/download")
+def download_caption_video(identifier: str):
+    job = manager.jobs.get(identifier)
+    if not job or job.get("kind") != "caption-export" or get_transcription(identifier)["state"] != "completed":
+        raise HTTPException(404, "Film nie jest jeszcze gotowy lub eksport wygasł.")
+    return FileResponse(job["directory"] / "captioned.mp4", media_type="video/mp4", filename="ClipsON-napisy.mp4")
 
 
 for filename in ("landscape.svg", "favicon.svg"):

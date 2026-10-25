@@ -27,7 +27,7 @@ Domyślnie używany jest **Whisper large-v3** i dopasowanie fonetyczne do język
 - Zachowany jest zegar wideo, w tym opóźniony początek ścieżki i cisza. Audio jest resamplowane do 16 kHz oraz przetwarzane w pięciominutowych fragmentach z dwusekundowym kontekstem. Czasy fragmentów wracają do bezwzględnych sekund nagrania.
 - Eksport JSON zachowuje `start`, `end`, `score` i `timing` każdego słowa. Niedostępne czasy pozostają `null`; słowa są oznaczane w interfejsie. Nie są usuwane z tekstu tylko dlatego, że model nie umiał ich dopasować.
 - Dokładność zapisu do milisekund nie oznacza gwarancji trafienia do jednej milisekundy. Szum, muzyka, nazwy własne, liczby i nakładające się głosy mogą powodować pomyłki. Przed publikacją napisów trzeba przejrzeć wynik.
-- Generowanie klipów i wypalanie napisów pozostają kolejnymi etapami. Obecny JSON jest podstawą pod te funkcje.
+- Generowanie klipów pozostaje kolejnym etapem. Animowane napisy są już dostępne w podglądzie i w eksporcie MP4.
 
 ## Pliki i prywatność
 
@@ -84,3 +84,19 @@ backend/.venv/Scripts/python.exe -m pip install --upgrade torch==2.8.0 torchvisi
 ```
 
 `backend/run.ps1 -Device cuda` wymaga GPU. Zwykłe uruchomienie i domyślne `-Device auto` wybierają dostępny sprzęt. Biblioteki cuBLAS/cuDNN z pakietu PyTorch udostępniamy procesowi CTranslate2 bez zmiany systemowego PATH i bez instalacji pełnego CUDA Toolkit. Sterownik NVIDIA musi być zgodny z CUDA 12.8. Plik `backend/runtime.py` sprawdza dostępność CUDA w PyTorch i CTranslate2, ponieważ samo wykrycie karty przez sterownik nie wystarcza.
+## Animowane napisy
+
+Po wybraniu wideo wykonaj transkrypcję lub użyj „Wczytaj transkrypcję JSON” z wynikiem zapisanym dla tego samego nagrania. Import zachowuje oryginalny zegar słów; nie dopasowuje transkrypcji z innego pliku. Wybierz „Animowane napisy”, szablon oraz ustawienia:
+
+- Żółty akcent: biały tekst na czarnym tle, bieżące słowo żółte.
+- Czerwony akcent: biały tekst na czarnym tle, bieżące słowo czerwone.
+- Klasyczny obrys: biały tekst z czarnym obrysem, bieżące słowo żółte.
+- Wielkość 4–10% wysokości obrazu, położenie dół/środek/góra, 2–6 słów na ekranie i opcjonalny efekt pop.
+
+Podgląd mieści napisy w rzeczywistym obrazie wideo, poza czarnymi pasami, i ma własny przycisk pełnego ekranu obejmujący warstwę napisów. Przerwy w mowie nie powodują przesuwania późniejszych czasów; słowa bez dopasowanego czasu mogą być widoczne jako kontekst frazy, ale nie dostają wymyślonego momentu podświetlenia.
+
+„Eksportuj film z napisami” tworzy lokalnie nowy MP4 (H.264 / AAC) z wtopionymi napisami; oryginał nie jest modyfikowany. FFmpeg/libass renderuje podświetlanie oraz animację według bezwzględnych czasów. Format ASS zapisuje czas co 0,01 s, więc może wystąpić zaokrąglenie do 5 ms bez kumulowania przesunięcia. Typografia i kształt czarnego tła mogą nieznacznie różnić się między CSS przeglądarki i libass. Kodowanie używa NVIDIA NVENC, jeśli test sprzętu przechodzi, a w przeciwnym razie libx264; to wybór kodera eksportu, niezależny od urządzenia WhisperX.
+
+Po eksporcie użyj „Pobierz MP4”. Eksport ma rzeczywisty postęp z FFmpeg i obsługę anulowania. Materiał i dane napisów trafiają wyłącznie do lokalnego silnika. Aplikacja przetwarza jeden materiał naraz, więc transkrypcja i eksport nie obciążają silnika jednocześnie. Film wynikowy pozostaje w katalogu zadania do sprzątnięcia zgodnie z zasadami plików roboczych opisanymi powyżej. Wideo nie ma limitu rozmiaru narzuconego przez aplikację; dane JSON napisów mają limit 20 MB.
+
+Moduły: `web/src/captions.js`, `web/src/caption-utils.js`, `web/src/captions.css`, `backend/caption_export.py` oraz `backend/caption_worker.py`.
