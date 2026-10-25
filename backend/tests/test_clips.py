@@ -41,6 +41,12 @@ class HighlightTests(unittest.TestCase):
         self.assertGreater(editorial_score('Dlaczego popełniasz ten błąd? Wystarczy jeden krok.')[0],
                            editorial_score('Dzień dobry, witajcie, subskrybujcie kanał, link w opisie.')[0])
 
+    def test_useful_clip_does_not_inherit_a_promotional_opening(self):
+        source=transcript('All the links are in the description. Why do your videos sound bad? The biggest mistake is the distance from your mouth. Instead of buying a microphone try moving it closer.')
+        candidates=build_candidates(validate_analysis({'transcript':source,'minDuration':5,'maxDuration':25,'engine':'fast'}))
+        self.assertTrue(candidates)
+        self.assertTrue(all(not item['text'].startswith('All the links') for item in candidates))
+
     def test_missing_word_times_are_never_invented(self):
         source=transcript('To jest krótki test.')
         source['segments'][0]['words'][1].update(start=None,end=None)

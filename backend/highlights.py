@@ -95,6 +95,11 @@ def build_candidates(options):
     units = units_from_words(options['words'])
     candidates, seen = [], set()
     for i, unit in enumerate(units):
+        # Do not let a high-scoring insight inherit an unrelated promotional opening.
+        if re.match(r'^(hello\b|welcome\b|dzień dobry\b|witajcie\b|remember to subscribe\b|'
+                    r'pamiętajcie o subskry|all the links\b|linki .{0,40}opisie|thanks for watching\b|'
+                    r'if you have not subscribed\b|now i need a short break\b)', unit['text'].lower()):
+            continue
         parts = []
         for ending_index in range(i, len(units)):
             ending = units[ending_index]
