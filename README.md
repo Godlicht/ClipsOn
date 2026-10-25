@@ -91,7 +91,11 @@ Po wybraniu wideo wykonaj transkrypcję lub użyj „Wczytaj transkrypcję JSON�
 - Żółty akcent: biały tekst na czarnym tle, bieżące słowo żółte.
 - Czerwony akcent: biały tekst na czarnym tle, bieżące słowo czerwone.
 - Klasyczny obrys: biały tekst z czarnym obrysem, bieżące słowo żółte.
-- Wielkość 4–10% wysokości obrazu, położenie dół/środek/góra, 2–6 słów na ekranie i opcjonalny efekt pop.
+- Fioletowy puls, Błękitny akcent i Limonka: trzy kolejne kolory podświetlenia na czarnym tle.
+- Jasna karta: ciemny tekst na białym tle z różowym akcentem. Neon: błękitny akcent z obrysem. Minimal: szary tekst z białym bieżącym słowem.
+- Wielkość 2–20% wysokości obrazu, szerokość pola 20–96%, 2–6 słów na ekranie i opcjonalny efekt pop. Długie słowa automatycznie dopasowują się do pola.
+
+Przycisk „Edytuj na ekranie” wstrzymuje wideo i pokazuje ramkę. Przeciągnij jej środek, aby przesunąć napisy; boczne uchwyty zmieniają szerokość i podział wierszy, a narożniki skalują tekst. Ramka pozostaje w granicach rzeczywistego obrazu, także w pionowym wideo i na pełnym ekranie. Strzałki przesuwają zaznaczoną ramkę (Shift zwiększa krok); na uchwytach zmieniają szerokość lub wielkość. Esc kończy edycję. W przerwie mowy edycja pokazuje ostatnią frazę bez przesuwania nagrania. „Przywróć układ” przywraca początkowe położenie, rozmiar i szerokość. Te ustawienia oraz podział wierszy są uwzględniane w MP4; czasy słów pozostają bez zmian.
 
 Podgląd mieści napisy w rzeczywistym obrazie wideo, poza czarnymi pasami, i ma własny przycisk pełnego ekranu obejmujący warstwę napisów. Przerwy w mowie nie powodują przesuwania późniejszych czasów; słowa bez dopasowanego czasu mogą być widoczne jako kontekst frazy, ale nie dostają wymyślonego momentu podświetlenia.
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCaptionCues, captionAt, videoContentRect, captionFontSize } from '../src/caption-utils.js';
+import { buildCaptionCues, captionAt, videoContentRect, captionFontSize, captionLayout, captionTransform } from '../src/caption-utils.js';
 
 const word = (text, start, end) => ({ text, start, end });
 test('caption changes use absolute word times, including silence and long offsets', () => {
@@ -28,4 +28,21 @@ test('overlay follows the contained video, excluding pillarbox bars', () => {
   assert.deepEqual(videoContentRect(1080,1920,480,240),{x:172.5,y:0,width:135,height:240});
   const cue={words:[word('Napisy',1,2)],breakAfter:-1};
   assert.equal(captionFontSize(cue,1920,1080,6.5),70.2);
+});
+test('narrowing the field wraps words without altering their source times', () => {
+  const cue = {words: ['To', 'jest', 'bardzo', 'ważny', 'test'].map((text,i)=>word(text,i,i+.5))};
+  const before = JSON.stringify(cue);
+  assert.deepEqual(captionLayout(cue,960,540,10,.88).breaks,[3]);
+  assert.deepEqual(captionLayout(cue,960,540,10,.3).breaks,[1,2,3]);
+  assert.equal(JSON.stringify(cue),before);
+});
+test('dragged captions stay inside landscape and portrait video at all sizes', () => {
+  const cues=[{words:[word('Bardzo',0,1),word('długie',1,2),word('napisy',2,3)]}];
+  for(const [w,h] of [[1920,1080],[1080,1920]]) {
+    const result=captionTransform({x:-1,y:4,width:.4,size:20},cues,w,h);
+    const layout=captionLayout(cues[0],w,h,result.size,result.width);
+    assert.ok(result.x-result.width/2>=.019);
+    assert.ok(result.y+layout.height/h/2<=.981);
+    assert.ok(layout.size>0);
+  }
 });

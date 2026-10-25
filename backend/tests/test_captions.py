@@ -1,5 +1,5 @@
 import unittest
-from backend.caption_export import validate_payload, build_ass, ass_time, escape_text
+from backend.caption_export import validate_payload, build_ass, ass_time, escape_text, caption_layout, PRESETS
 
 
 def payload():
@@ -31,6 +31,23 @@ class CaptionTests(unittest.TestCase):
     def test_time_rounding_does_not_accumulate_across_words(self):
         self.assertEqual(ass_time(3600.126),'1:00:00.13')
         self.assertEqual(ass_time(59.999),'0:01:00.00')
+
+    def test_custom_position_and_new_templates_survive_export(self):
+        for preset in PRESETS:
+            data=payload(); data['settings'].update(preset=preset,x=.3,y=.4,width=.4,size=12,position='custom')
+            document=build_ass(validate_payload(data),1920,1080,4000)
+            self.assertIn(r'\pos(576.00,432.00)',document)
+            self.assertIn('\\1c&H'+PRESETS[preset]+'&',document)
+
+    def test_wrap_matches_preview_at_narrow_width(self):
+        cue={'words':[{'text':word} for word in ['To','jest','bardzo','ważny','test']]}
+        self.assertEqual(caption_layout(cue,960,540,10,.88)[1],[3])
+        self.assertEqual(caption_layout(cue,960,540,10,.3)[1],[1,2,3])
+
+    def test_invalid_geometry_rejected(self):
+        for key,value in [('x',float('nan')),('y',2),('width',.01),('size',30)]:
+            data=payload();data['settings'][key]=value
+            with self.assertRaises(ValueError):validate_payload(data)
 
 
 if __name__=='__main__':unittest.main()
