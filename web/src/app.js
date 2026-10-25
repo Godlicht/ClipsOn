@@ -104,7 +104,6 @@ function selectFile(file) {
     showError('Wybierz plik wideo, np. MP4, MOV lub WEBM.'); return;
   }
   if (file.size === 0) { showError('Ten plik jest pusty. Wybierz inne wideo.'); return; }
-  if (file.size > 2 * 1024 ** 3) { showError('Ten plik ma więcej niż 2 GB. Wybierz mniejszy materiał.'); return; }
   video.pause();
   video.removeAttribute('src');
   video.load();

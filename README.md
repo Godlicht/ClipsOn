@@ -42,7 +42,7 @@ npm start
 
 ## Gotowy zakres
 
-Strona główna, oba motywy, animacje z obsługą ograniczenia ruchu, nawigacja sekcji, FAQ i interaktywne demo z trzema fragmentami przykładowej transkrypcji. Wybór lub przeciągnięcie wideo otwiera prawdziwy lokalny podgląd z nazwą, rozmiarem, czasem trwania i rozdzielczością. Obsługiwane pliki do 2 GB; dostępność odtwarzania zależy od kodeków przeglądarki. Wideo pozostaje na urządzeniu i nie jest przesyłane na serwer.
+Strona główna, oba motywy, animacje z obsługą ograniczenia ruchu, nawigacja sekcji, FAQ i interaktywne demo z trzema fragmentami przykładowej transkrypcji. Wybór lub przeciągnięcie wideo otwiera prawdziwy lokalny podgląd z nazwą, rozmiarem, czasem trwania i rozdzielczością. Aplikacja nie narzuca limitu rozmiaru pliku; dostępność odtwarzania zależy od kodeków i możliwości przeglądarki. Wideo pozostaje na urządzeniu i nie jest przesyłane na serwer.
 
 ## Kolejny etap aplikacji
 
