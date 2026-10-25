@@ -21,6 +21,8 @@ Domyślnie używany jest **Whisper large-v3** i dopasowanie fonetyczne do język
 ## Synchronizacja i dokładność
 
 - Po lewej wideo, po prawej transkrypcja. Kliknięcie słowa przechodzi do jego czasu, a odtwarzanie podświetla bieżące słowo.
+- Suwak „Panel transkrypcji” ukrywa i pokazuje panel bez utraty tekstu i bez zatrzymywania nagrania. Widoczność jest zapamiętywana lokalnie.
+- Ręczne przewijanie kółkiem, dotykiem, klawiaturą lub paskiem przewijania wstrzymuje automatyczne przewijanie, zachowując podświetlanie słów. „Wróć do odtwarzania” ponownie włącza śledzenie.
 - WhisperX rozpoznaje mowę, następnie dopasowuje tekst do dźwięku przez forced alignment. Nie rozdzielamy słów równomiernie po długości zdania.
 - Zachowany jest zegar wideo, w tym opóźniony początek ścieżki i cisza. Audio jest resamplowane do 16 kHz oraz przetwarzane w pięciominutowych fragmentach z dwusekundowym kontekstem. Czasy fragmentów wracają do bezwzględnych sekund nagrania.
 - Eksport JSON zachowuje `start`, `end`, `score` i `timing` każdego słowa. Niedostępne czasy pozostają `null`; słowa są oznaczane w interfejsie. Nie są usuwane z tekstu tylko dlatego, że model nie umiał ich dopasować.

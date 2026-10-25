@@ -19,6 +19,47 @@ export function createTranscription(video) {
   let file, ready = false, running = false, revision = 0, currentJob, upload;
   let pollTimer, frame, transcript, timedWords = [], active = -1, checking = false, launching = false;
   let activeRow;
+  let followPlayback = true;
+  const panelToggle = $('#transcript-toggle');
+  const followBar = $('#transcript-followbar');
+  const resumeFollow = $('#resume-transcript-follow');
+
+  function setPanelVisible(visible) {
+    panel.hidden = !visible;
+    panelToggle.setAttribute('aria-checked', String(visible));
+    $('.import-workspace').classList.toggle('transcript-hidden', !visible);
+    try { localStorage.setItem('clipson-transcript-visible', String(visible)); } catch { /* Optional preference. */ }
+    if (visible) scrollToActiveRow();
+  }
+  try { setPanelVisible(localStorage.getItem('clipson-transcript-visible') !== 'false'); }
+  catch { setPanelVisible(true); }
+  panelToggle.addEventListener('click', () => setPanelVisible(panel.hidden));
+
+  function updateFollowControls() {
+    followBar.hidden = !timedWords.length;
+    resumeFollow.hidden = followPlayback;
+    $('#transcript-follow-status').textContent = followPlayback ? 'Tekst podąża za nagraniem' : 'Przeglądasz tekst';
+  }
+  function pauseFollowing() {
+    if (results.scrollHeight <= results.clientHeight || !timedWords.length) return;
+    followPlayback = false;
+    updateFollowControls();
+  }
+  results.addEventListener('wheel', pauseFollowing, { passive: true });
+  results.addEventListener('touchmove', pauseFollowing, { passive: true });
+  results.addEventListener('pointerdown', (event) => {
+    // Includes a scrollbar drag; word/time buttons keep their normal seek action.
+    if (event.target === results) pauseFollowing();
+  });
+  results.addEventListener('keydown', (event) => {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)
+        || (event.key === ' ' && event.target === results)) pauseFollowing();
+  });
+  resumeFollow.addEventListener('click', () => {
+    followPlayback = true;
+    updateFollowControls();
+    scrollToActiveRow();
+  });
 
   function announce(message) { $('#transcription-announcement').textContent = message; }
   function deviceLabel(data) {
@@ -40,6 +81,8 @@ export function createTranscription(video) {
   }
   function reset() {
     transcript = undefined; timedWords = []; active = -1; activeRow = undefined;
+    followPlayback = true;
+    updateFollowControls();
     results.replaceChildren(); results.hidden = true;
     $('#transcript-empty').hidden = false;
     $('#transcription-error').hidden = true;
@@ -117,6 +160,7 @@ export function createTranscription(video) {
       row.append(text); fragment.append(row);
     });
     timedWords.sort((a, b) => a.start - b.start);
+    updateFollowControls();
     results.replaceChildren(fragment); results.hidden = false;
     $('#transcript-empty').hidden = true;
     busy(false);
@@ -145,13 +189,17 @@ export function createTranscription(video) {
       if (activeRow !== word.row) {
         activeRow?.classList.remove('current-row'); activeRow = word.row;
         activeRow.classList.add('current-row');
-        // Scroll only the transcript pane; never move the modal/page.
-        const y = activeRow.offsetTop;
-        if (y < results.scrollTop || y + activeRow.offsetHeight > results.scrollTop + results.clientHeight) {
-          results.scrollTop = Math.max(0, y - results.clientHeight * 0.3);
-        }
+        scrollToActiveRow();
       }
     } else { activeRow?.classList.remove('current-row'); activeRow = undefined; }
+  }
+  function scrollToActiveRow() {
+    if (!followPlayback || panel.hidden || !activeRow) return;
+    // Only follow while enabled. Highlighting stays live during manual reading.
+    const y = activeRow.offsetTop;
+    if (y < results.scrollTop || y + activeRow.offsetHeight > results.scrollTop + results.clientHeight) {
+      results.scrollTop = Math.max(0, y - results.clientHeight * 0.3);
+    }
   }
   function animationFrame() {
     updateHighlight();

@@ -71,6 +71,7 @@
     <div class="dialog-header"><span class="eyebrow">TWOJE WIDEO. KAŻDE SŁOWO NA SWOIM MIEJSCU.</span><button class="icon-button" data-close aria-label="Zamknij"><svg><use href="#i-close"/></svg></button></div>
     <h2 id="upload-title">Dajmy mu <span class="purple">nowe życie.</span></h2>
     <p class="dialog-intro">Dodaj materiał i zamień jego dźwięk w tekst dopasowany do czasu nagrania.</p>
+    <div class="workspace-toolbar"><button type="button" class="transcript-toggle" id="transcript-toggle" role="switch" aria-checked="true" aria-controls="transcription-panel"><span>Panel transkrypcji</span><span class="transcript-toggle-track" aria-hidden="true"><span></span></span></button></div>
     <div class="import-workspace">
       <section class="import-media" aria-label="Twój materiał">
         <div class="workspace-label"><svg><use href="#i-file"/></svg> Twój materiał <span>LOKALNIE</span></div>
@@ -82,12 +83,13 @@
         <button class="button transcribe-button" id="transcribe-button" disabled><svg><use href="#i-spark"/></svg> Wykonaj transkrypcję <svg><use href="#i-arrow"/></svg></button>
         <div class="timing-note"><svg><use href="#i-check"/></svg><span>Dopasowanie do dźwięku <strong>słowo po słowie.</strong><br/>Oryginalne znaczniki czasu zostają zachowane.</span></div>
       </section>
-      <section class="transcription-panel" aria-labelledby="transcript-heading" aria-busy="false">
+      <section class="transcription-panel" id="transcription-panel" aria-labelledby="transcript-heading" aria-busy="false">
         <div class="transcript-panel-header"><h3 id="transcript-heading"><svg><use href="#i-text"/></svg> Transkrypcja</h3><span class="engine-badge" id="engine-status">WhisperX · lokalnie</span></div>
         <div class="transcript-empty" id="transcript-empty"><span class="transcript-empty-icon"><svg><use href="#i-text"/></svg></span><strong>Twoja historia, zapisana.</strong><p>Dodaj wideo i rozpocznij transkrypcję.<br/>Tutaj pojawi się każde rozpoznane słowo.</p><span class="timestamp-preview">00:00 <i></i> 00:00</span></div>
         <div class="transcript-processing" id="transcript-processing" hidden><span class="transcription-spinner"></span><strong id="transcript-stage">Przygotowywanie materiału…</strong><p id="transcript-progress-label">Możesz w tym czasie oglądać wideo.</p><progress id="transcript-progress" aria-label="Postęp transkrypcji"></progress><button class="button-text" id="cancel-transcription">Anuluj transkrypcję</button></div>
         <p class="transcription-error" id="transcription-error" role="alert" hidden></p>
-        <div class="transcript-results" id="transcript-results" aria-label="Tekst ze znacznikami czasu" hidden></div>
+        <div class="transcript-followbar" id="transcript-followbar" hidden><span id="transcript-follow-status">Tekst podąża za nagraniem</span><button type="button" class="button-text" id="resume-transcript-follow" hidden>Wróć do odtwarzania <svg><use href="#i-arrow"/></svg></button></div>
+        <div class="transcript-results" id="transcript-results" tabindex="0" role="region" aria-label="Tekst ze znacznikami czasu" hidden></div>
         <div class="transcript-bottom"><span id="transcript-summary">Kliknij słowo, aby przejść do tego momentu.</span><button class="button-text" id="download-transcript" hidden>Zapisz JSON ↓</button></div>
         <p class="alignment-warning" id="alignment-warning" hidden></p>
       </section>
